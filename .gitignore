@@ -1,0 +1,7 @@
+res
+venv
+*test.py
+*.xlsx
+
+
+
