@@ -2,6 +2,6 @@ res
 venv
 *test.py
 *.xlsx
-
-
+*.json
+__pycache__
 

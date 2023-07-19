@@ -118,13 +118,23 @@ class StartTask:
         res = self.parse_response(response)
         return res
 
-    @staticmethod
-    def parse_response(json_data):
+    def parse_response(self, json_data):
         if json_data.get('meta').get('code') == -8:
             raise PermissionError('cookies失效或者出现了验证码未通过！')
         return_data = list()
         shipments = json_data.get('shipments')
         for ship in shipments:
+            code = ship.get('code')
+            if code == 400:
+                res = DataModel(
+                    waybill_number='None',
+                    provider_name='None',
+                    to='None',
+                    latest_status='查询失败或不支持查询',
+                    events='None'
+                )
+                return_data.append(res)
+                continue
             prior_status = ship.get('prior_status')
             number = ship.get('number')
             carrier = ship.get('carrier')
@@ -135,38 +145,45 @@ class StartTask:
                 continue
 
             shipment: dict = ship.get('shipment', {})
-            sender_country = config.country_dict.get(shipment.get('shipping_info').
-                                                     get('shipper_address').get('country'))
-            recipient_country = config.country_dict.get(shipment.get('shipping_info').
-                                                        get('recipient_address').get('country'))
+            self.parse_shipment(shipment, res, carrier)
 
-            to = f'{sender_country} -> {recipient_country}'
-            res.to = to
-            time_metrics = shipment.get('time_metrics').get('days_after_order')
-            latest_status = config.package_info.get(shipment.get('latest_status').get('status'))
-            if not latest_status:
-                latest_status = config.package_info.get(shipment.get('latest_status').get('sub_status'))
-                try:
-                    latest_status = latest_status % config.post_dict.get(str(carrier))
-
-                except TypeError:
-                    latest_status = '正在等待揽收'
-            res.latest_status = f'({time_metrics}天)--{latest_status}'
-            events = shipment.get('tracking').get('providers')[0].get('events')
-            event_list = list()
-            for event in events:
-                # time_info = time.strptime(event.get('time_iso')[:-6], '%Y-%m-%dT%H:%M:%S')
-                event_str = f'{event.get("time_iso").replace("T", " ")[:-9]}  ' \
-                            f'{event.get("location")}  ' \
-                            f'{event.get("description")}'
-                event_list.append(event_str)
-
-            event = '\n'.join(event_list)
-            res.events = event
             return_data.append(res)
         return return_data
 
-    def write_to_excel(self, save_list: List[DataModel]):
+    @staticmethod
+    def parse_shipment(shipment, res, carrier):
+        sender_country = config.country_dict.get(shipment.get('shipping_info').
+                                                 get('shipper_address').get('country'))
+        recipient_country = config.country_dict.get(shipment.get('shipping_info').
+                                                    get('recipient_address').get('country'))
+
+        to = f'{sender_country} -> {recipient_country}'
+        res.to = to
+        time_metrics = shipment.get('time_metrics').get('days_after_order')
+        latest_status = config.package_info.get(shipment.get('latest_status').get('status'))
+        if not latest_status:
+            latest_status = config.package_info.get(shipment.get('latest_status').get('sub_status'))
+            try:
+                latest_status = latest_status % config.post_dict.get(str(carrier))
+
+            except TypeError:
+                latest_status = '正在等待揽收'
+        res.latest_status = f'({time_metrics}天)--{latest_status}'
+        events = shipment.get('tracking').get('providers')[0].get('events')
+        event_list = list()
+        for event in events:
+            # time_info = time.strptime(event.get('time_iso')[:-6], '%Y-%m-%dT%H:%M:%S')
+            event_str = f'{event.get("time_iso").replace("T", " ")[:-9]}  ' \
+                        f'{event.get("location")}  ' \
+                        f'{event.get("description")}'
+            event_list.append(event_str)
+
+        event = '\n'.join(event_list)
+        res.events = event
+        return res
+
+    @staticmethod
+    def write_to_excel(save_list: List[DataModel]):
         order_number = list()
         provider = list()
         status = list()
